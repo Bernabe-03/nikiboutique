@@ -133,27 +133,27 @@ const app = express();
 
 // --- Configuration CORS ---
 app.use(cors({
-  origin: function (origin, callback) {
-    const allowedOrigins = [
-      'http://localhost:5173', 
-      'http://localhost:3000', 
-      'https://niki-boutique.vercel.app/',
-      process.env.CLIENT_URL
-    ].filter(Boolean);
-
-    if (!origin) return callback(null, true);
-
-    if (allowedOrigins.indexOf(origin) !== -1) {
-      callback(null, true);
-    } else {
-      callback(new Error('Not allowed by CORS'));
-    }
-  },
-  credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept'],
-  exposedHeaders: ['Content-Range', 'X-Content-Range']
-}));
+    origin: function (origin, callback) {
+      const allowedOrigins = [
+        'http://localhost:5173', 
+        'http://localhost:3000', 
+        'https://niki-boutique.vercel.app/',
+        process.env.CLIENT_URL
+      ].filter(Boolean);
+  
+      if (!origin) return callback(null, true);
+  
+      if (allowedOrigins.indexOf(origin) !== -1) {
+        callback(null, true);
+      } else {
+        callback(new Error('Not allowed by CORS'));
+      }
+    },
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept'],
+    exposedHeaders: ['Content-Range', 'X-Content-Range']
+  }));  
 
 // --- Middleware ---
 app.use(helmet());
