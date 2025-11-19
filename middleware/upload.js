@@ -1,94 +1,116 @@
-import multer from "multer";
-import cloudinary from "../config/cloudinary.js";
+import multer from 'multer';
+import { CloudinaryStorage } from 'multer-storage-cloudinary';
+import cloudinary from '../config/cloudinary.js';
 
-// Multer utilise la mémoire (buffer), pas un stockage Cloudinary déprécié
-const storage = multer.memoryStorage();
+// Configuration du stockage Cloudinary pour les images
+const imageStorage = new CloudinaryStorage({
+  cloudinary: cloudinary,
+  params: (req, file) => {
+    return {
+      folder: 'nono-vitrine/products/images',
+      format: file.mimetype.split('/')[1] === 'jpeg' ? 'jpg' : file.mimetype.split('/')[1],
+      public_id: `image_${Date.now()}_${Math.round(Math.random() * 1E9)}`,
+      transformation: [
+        { width: 800, height: 800, crop: 'limit', quality: 'auto' },
+        { format: 'auto' }
+      ]
+    };
+  },
+});
 
-// Filtrage des fichiers (images + vidéos)
+// Configuration du stockage Cloudinary pour les vidéos
+const videoStorage = new CloudinaryStorage({
+  cloudinary: cloudinary,
+  params: (req, file) => {
+    return {
+      folder: 'nono-vitrine/products/videos',
+      resource_type: 'video',
+      public_id: `video_${Date.now()}_${Math.round(Math.random() * 1E9)}`,
+      transformation: [
+        { quality: 'auto' },
+        { format: 'mp4' } // Convertir en MP4 pour une meilleure compatibilité
+      ]
+    };
+  },
+});
+
+// Filtrage des fichiers amélioré
 const fileFilter = (req, file, cb) => {
-  if (file.mimetype.startsWith("image/")) {
-    const allowed = ["image/jpeg", "image/jpg", "image/png", "image/webp"];
-    if (allowed.includes(file.mimetype)) return cb(null, true);
-    return cb(new Error("Format d'image non supporté (JPEG, JPG, PNG, WEBP)"), false);
+  // Autoriser les images
+  if (file.mimetype.startsWith('image/')) {
+    const allowedImageTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'];
+    if (allowedImageTypes.includes(file.mimetype)) {
+      cb(null, true);
+    } else {
+      cb(new Error('Format d\'image non supporté! Utilisez JPEG, JPG, PNG ou WEBP.'), false);
+    }
   }
-
-  if (file.mimetype.startsWith("video/")) {
-    const allowed = ["video/mp4", "video/mov", "video/avi", "video/webm"];
-    if (allowed.includes(file.mimetype)) return cb(null, true);
-    return cb(new Error("Format vidéo non supporté (MP4, MOV, AVI, WEBM)"), false);
+  // Autoriser les vidéos
+  else if (file.mimetype.startsWith('video/')) {
+    const allowedVideoTypes = ['video/mp4', 'video/mov', 'video/avi', 'video/webm'];
+    if (allowedVideoTypes.includes(file.mimetype)) {
+      cb(null, true);
+    } else {
+      cb(new Error('Format vidéo non supporté! Utilisez MP4, MOV, AVI ou WEBM.'), false);
+    }
   }
-
-  return cb(new Error("Seules les images et vidéos sont autorisées !"), false);
+  // Rejeter les autres types
+  else {
+    cb(new Error('Seules les images et vidéos sont autorisées!'), false);
+  }
 };
 
-// Upload SIMPLE (ex: upload d'une seule image)
-export const upload = multer({
-  storage,
-  fileFilter,
-  limits: { fileSize: 5 * 1024 * 1024 }, // 5MB images
-}).single("file");
-
-// Upload MULTIPLE : images + vidéos
-export const uploadMultiple = multer({
-  storage,
-  fileFilter,
+// Configuration de Multer pour les images
+const upload = multer({
+  storage: imageStorage,
+  fileFilter: fileFilter,
   limits: {
-    fileSize: 50 * 1024 * 1024, // max 50MB par fichier
-    files: 15, // limite totale
+    fileSize: 5 * 1024 * 1024, // 5MB max pour les images
+  },
+});
+
+// Configuration de Multer pour l'upload multiple (images + vidéos)
+const uploadMultiple = multer({
+  fileFilter: fileFilter,
+  limits: {
+    fileSize: 50 * 1024 * 1024, // 50MB max par fichier
+    files: 15 // Maximum 15 fichiers au total
   },
 }).fields([
-  { name: "images", maxCount: 10 },
-  { name: "videos", maxCount: 5 },
+  { 
+    name: 'images', 
+    maxCount: 10,
+    storage: imageStorage // Utiliser le storage images pour les images
+  },
+  { 
+    name: 'videos', 
+    maxCount: 5,
+    storage: videoStorage // Utiliser le storage vidéos pour les vidéos
+  }
 ]);
 
-// Upload images → Cloudinary
-export const uploadImageToCloudinary = (file) => {
-  return new Promise((resolve, reject) => {
-    cloudinary.uploader.upload_stream(
-      {
-        folder: "nono-vitrine/products/images",
-        resource_type: "image",
-        transformation: [
-          { width: 800, height: 800, crop: "limit", quality: "auto" },
-          { format: "auto" },
-        ],
-      },
-      (err, result) => {
-        if (err) reject(err);
-        else resolve(result);
-      }
-    ).end(file.buffer);
-  });
-};
-
-// Upload vidéos → Cloudinary
-export const uploadVideoToCloudinary = (file) => {
-  return new Promise((resolve, reject) => {
-    cloudinary.uploader.upload_stream(
-      {
-        folder: "nono-vitrine/products/videos",
-        resource_type: "video",
-        transformation: [{ quality: "auto" }],
-      },
-      (err, result) => {
-        if (err) reject(err);
-        else resolve(result);
-      }
-    ).end(file.buffer);
-  });
-};
-
-// Gestion des erreurs Multer
-export const handleUploadError = (error, req, res, next) => {
+// Middleware pour gérer les erreurs Multer
+const handleUploadError = (error, req, res, next) => {
   if (error instanceof multer.MulterError) {
-    return res.status(400).json({
-      success: false,
-      message: error.message,
-    });
+    if (error.code === 'LIMIT_FILE_SIZE') {
+      return res.status(400).json({
+        success: false,
+        message: 'Fichier trop volumineux'
+      });
+    }
+    if (error.code === 'LIMIT_FILE_COUNT') {
+      return res.status(400).json({
+        success: false,
+        message: 'Trop de fichiers uploadés'
+      });
+    }
+    if (error.code === 'LIMIT_UNEXPECTED_FILE') {
+      return res.status(400).json({
+        success: false,
+        message: 'Type de fichier non autorisé'
+      });
+    }
   }
-
-  return res.status(400).json({
-    success: false,
-    message: error.message || "Erreur d'upload",
-  });
+  next(error);
 };
+export { upload, uploadMultiple, handleUploadError };
